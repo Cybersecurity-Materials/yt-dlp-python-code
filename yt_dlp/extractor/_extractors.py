@@ -1885,6 +1885,10 @@ from .sonyliv import (
     SonyLIVIE,
     SonyLIVSeriesIE,
 )
+from .soopglobal import (
+    SoopGlobalLiveIE,
+    SoopGlobalVodIE,
+)
 from .soundcloud import (
     SoundcloudEmbedIE,
     SoundcloudIE,
