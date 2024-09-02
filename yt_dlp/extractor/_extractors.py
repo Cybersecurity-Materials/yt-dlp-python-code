@@ -2177,6 +2177,10 @@ from .tvanouvelles import (
     TVANouvellesArticleIE,
     TVANouvellesIE,
 )
+from .tvbanywherena import (
+    TvbAnywhereNaIE,
+    TvbAnywhereNaSeriesIE,
+)
 from .tvc import (
     TVCIE,
     TVCArticleIE,
