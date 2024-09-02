@@ -1,6 +1,9 @@
+import base64
 import math
+import time
 
 from .common import InfoExtractor
+from .videa import VideaIE
 from ..utils import InAdvancePagedList, str_or_none, traverse_obj, try_call
 
 
@@ -71,7 +74,36 @@ class XimalayaIE(XimalayaBaseIE):
                 'like_count': int,
             },
         },
+        {
+            # VIP-restricted audio
+            'url': 'https://www.ximalaya.com/sound/562111701',
+            'only_matching': True,
+        },
     ]
+
+    @staticmethod
+    def _decrypt_filename(audio_info):
+        seed = float(audio_info['seed'])
+        file_id = audio_info['fileId']
+        cgstr = ''
+        key = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ/\\:._-1234567890'
+        for _ in range(len(key)):
+            seed = float(int(211 * seed + 30031) % 65536)
+            r = int(seed / 65536 * len(key))
+            cgstr += key[r]
+            key = key.replace(key[r], '')
+        parts = file_id.split('*')
+        filename = ''.join(cgstr[int(part)] for part in parts if part.isdigit())
+        if not filename.startswith('/'):
+            filename = '/' + filename
+        return filename
+
+    @staticmethod
+    def _decrypt_url_params(audio_info):
+        params = VideaIE.rc4(base64.b64decode(audio_info['ep']),
+                             'xkt3a41psizxrh9l').split('-')
+        sign, token, timestamp = params[1], params[2], params[3]
+        return sign, token, timestamp
 
     def _real_extract(self, url):
         scheme = 'https' if url.startswith('https') else 'http'
@@ -81,6 +113,24 @@ class XimalayaIE(XimalayaBaseIE):
         audio_info = self._download_json(
             audio_info_file, audio_id,
             f'Downloading info json {audio_info_file}', 'Unable to download info file')
+
+        # NOTE(xcsong): VIP-restricted audio
+        if audio_info.get('is_paid'):
+            ts = int(time.time())
+            audio_info_file = f'{scheme}://mpay.ximalaya.com/mobile/track/pay/{audio_id}/{ts}?device=pc&isBackend=true&_={ts}'
+            audio_info = self._download_json(
+                audio_info_file, audio_id,
+                f'Downloading VIP info json {audio_info_file}', 'Unable to download VIP info file')
+            filename = self._decrypt_filename(audio_info)
+            sign, token, timestamp = self._decrypt_url_params(audio_info)
+            buy_key = audio_info.get('buyKey')
+            duration = audio_info.get('duration')
+            domain = audio_info.get('domain')
+            api_version = audio_info.get('apiVersion')
+            args = f'?sign={sign}&buy_key={buy_key}&token={token}&timestamp={timestamp}&duration={duration}'
+            audio_info['play_path_64'] = f'{domain}/download/{api_version}{filename}{args}'
+            if '_preview_' in audio_info['play_path_64']:
+                self.report_warning('Please use correct cookies to download VIP audios!')
 
         formats = [{
             'format_id': f'{bps}k',
