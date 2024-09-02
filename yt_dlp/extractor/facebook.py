@@ -481,6 +481,9 @@ class FacebookIE(InfoExtractor):
                 r'data-sjs>({.*?ScheduledServerJS.*?})</script>', webpage)]
             post = traverse_obj(post_data, (
                 ..., 'require', ..., ..., ..., '__bbox', 'require', ..., ..., ..., '__bbox', 'result', 'data'), expected_type=dict) or []
+            post_stats = traverse_obj(post, (
+                lambda _, v: v['short_form_video_context']['video']['id'] == video_id and v[
+                    'url'] == f'https://www.facebook.com/reel/{video_id}/', 'feedback', {dict}, any)) or {}
             media = traverse_obj(post, (..., 'attachments', ..., lambda k, v: (
                 k == 'media' and str(v['id']) == video_id and v['__typename'] == 'Video')), expected_type=dict)
             title = get_first(media, ('title', 'text'))
@@ -498,7 +501,8 @@ class FacebookIE(InfoExtractor):
                 or get_first(post, ('video', 'creation_story', 'attachments', ..., 'media', lambda k, v: k == 'owner' and v['name']))
                 or get_first(post, (..., 'video', lambda k, v: k == 'owner' and v['name']))
                 or get_first(post, ('node', 'actors', ..., {dict}))
-                or get_first(post, ('event', 'event_creator', {dict})) or {})
+                or get_first(post, ('event', 'event_creator', {dict}))
+                or get_first(post, ('video', 'creation_story', 'short_form_video_context', 'video_owner', {dict}), default=None) or {})
             uploader = uploader_data.get('name') or (
                 clean_html(get_element_by_id('fbPhotoPageAuthorName', webpage))
                 or self._search_regex(
@@ -524,6 +528,12 @@ class FacebookIE(InfoExtractor):
                     webpage, 'view count', default=None)),
                 'concurrent_view_count': get_first(post, (
                     ('video', (..., ..., 'attachments', ..., 'media')), 'liveViewerCount', {int_or_none})),
+                **traverse_obj(post_stats, {
+                    'like_count': ('likers', 'count', {int}),
+                    'comment_count': ('total_comment_count', {int}),
+                    'repost_count': ('share_count_reduced', {parse_count}),
+                    'reactor_count': ('unified_reactors', 'count', {int}),
+                }),
             }
 
             info_json_ld = self._search_json_ld(webpage, video_id, default={})
@@ -938,12 +948,16 @@ class FacebookReelIE(InfoExtractor):
             'ext': 'mp4',
             'title': 'md5:b05800b5b1ad56c0ca78bd3807b6a61e',
             'description': 'md5:22f03309b216ac84720183961441d8db',
-            'uploader': 'md5:723e6cb3091241160f20b3c5dc282af1',
+            'uploader': 'Beast Camp Training',
             'uploader_id': '100040874179269',
             'duration': 9.579,
             'timestamp': 1637502609,
             'upload_date': '20211121',
             'thumbnail': r're:^https?://.*',
+            'like_count': int,
+            'comment_count': int,
+            'repost_count': int,
+            'reactor_count': int,
         },
     }]
 
